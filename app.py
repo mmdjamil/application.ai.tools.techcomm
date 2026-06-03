@@ -48,6 +48,59 @@ if uploaded_file is not None:
         run_links = st.checkbox("🔗 Broken Link Check", value=True)
 
     # ──────────────────────────────────────────
+    # Link Authorization (optional)
+    # ──────────────────────────────────────────
+    with st.expander("🔐 Link authorization (optional)"):
+        bearer_token = st.text_input(
+            "🔑 ******",
+            type="password",
+            placeholder="ghp_xxxxxxxxxxxx",
+            help="Sent as 'Authorization: ******'.",
+        )
+        auth_user = st.text_input(
+            "👤 Basic auth username",
+            placeholder="username",
+        )
+        auth_pass = st.text_input(
+            "🔒 Basic auth password",
+            type="password",
+            placeholder="password",
+        )
+        custom_headers_raw = st.text_area(
+            "📋 Custom headers (one per line, Key: Value)",
+            placeholder="X-API-Key: abc123\nX-Custom-Header: value",
+            help="Each line must be in 'Key: Value' format.",
+        )
+        allowed_hosts_raw = st.text_input(
+            "🌐 Allowed hosts (comma-separated)",
+            placeholder="api.github.com, raw.githubusercontent.com",
+            help="If set, credentials are ONLY sent to these hosts.",
+        )
+
+    # Build auth_config from inputs
+    auth_config: dict = {}
+    if bearer_token.strip():
+        auth_config["bearer_token"] = bearer_token.strip()
+    if auth_user.strip() and auth_pass.strip():
+        auth_config["basic_auth"] = (auth_user.strip(), auth_pass.strip())
+    if custom_headers_raw.strip():
+        custom_headers = {}
+        for raw_line in custom_headers_raw.splitlines():
+            if ":" in raw_line:
+                key, _, value = raw_line.partition(":")
+                key = key.strip()
+                value = value.strip()
+                if key:
+                    custom_headers[key] = value
+        if custom_headers:
+            auth_config["headers"] = custom_headers
+    if allowed_hosts_raw.strip():
+        auth_config["allowed_hosts"] = [
+            h.strip() for h in allowed_hosts_raw.split(",") if h.strip()
+        ]
+    auth_config = auth_config if auth_config else None
+
+    # ──────────────────────────────────────────
     # Run Scan
     # ──────────────────────────────────────────
     if st.button("🚀 Start Scan", type="primary", use_container_width=True):
@@ -114,7 +167,7 @@ if uploaded_file is not None:
                     text=f"Checking links... ({completed}/{total})"
                 )
 
-            link_results = check_all_links(parsed_lines, progress_callback=update_progress)
+            link_results = check_all_links(parsed_lines, progress_callback=update_progress, auth_config=auth_config)
             progress_bar.empty()
 
             # Summary metrics
