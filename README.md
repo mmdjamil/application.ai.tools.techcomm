@@ -49,7 +49,7 @@ Existing behavior is preserved: inclusive‑scan CSV export still works (now dri
   - PowerPoint (`.pptx`) — slides, shapes, and tables
   - Excel (`.xlsx`) — every sheet and row
 - 🔤 **Non‑inclusive language detection** with case‑insensitive whole‑word matching and suggested replacements.
-- ✅ **Suggestion review & corrected-copy export** — approve/reject each suggested rewrite row-by-row, then download an approved corrected `.txt` copy.
+- ✅ **Suggestion review & corrected-copy export** — approve/reject each suggested rewrite row-by-row, then download an approved corrected copy **in the original document format** (`.docx`, `.pptx`, or `.xlsx`); PDFs fall back to a plain `.txt` export with a UI notice.
 - 🔗 **Concurrent link checking** (10 workers) using HEAD requests with automatic GET fallback, custom User‑Agent, and 10s timeout.
 - 📊 **Summary metrics** — word count, compliance rate, total links, broken links.
 - 📥 **CSV export** of both inclusive scan and link check results.
@@ -69,6 +69,7 @@ application.ai.tools.techcomm/
     ├── __init__.py              # Public API exports
     ├── file_parser.py           # Parsers for .docx / .pdf / .pptx / .xlsx
     ├── inclusive_scanner.py     # Non-inclusive language detection
+    ├── document_rewriter.py     # Format-preserving corrected-copy export
     └── link_checker.py          # URL extraction & broken-link verification
 ```
 
@@ -135,9 +136,13 @@ Matching is **case‑insensitive** and uses **whole‑word boundaries** (`\b`) t
 
 1. After a scan, each finding includes **Original Sentence** and **Suggested Sentence** columns, plus an **Apply?** checkbox (default ticked).
 2. Untick any suggestions you do not want to keep.
-3. Click **✅ Generate corrected copy** to preview and download `<filename>_corrected.txt`.
-4. For multi-option entries like `master → primary / initiator`, the rewriter applies the first option (`primary`) while preserving matched casing (`Blacklist → Denylist`, `BLACKLIST → DENYLIST`).
-5. Current v1 limitation: corrected output is exported as plain `.txt` (lossless text), not back into original `.docx`/`.pdf`/`.pptx`/`.xlsx` files with formatting. Original-format round-tripping is on the roadmap.
+3. Click **✅ Generate corrected copy** to download the corrected document.
+4. The corrected copy is returned **in the same format as the uploaded file**:
+   - `.docx` → a `.docx` that opens cleanly in Word with original fonts, headings, and tables preserved.
+   - `.pptx` → a `.pptx` that opens in PowerPoint with layout and theme preserved.
+   - `.xlsx` → a `.xlsx` that opens in Excel with styling and untouched formulas preserved.
+   - `.pdf` → a plain `.txt` fallback (in-place PDF rewriting is not supported); a caption in the UI explains this.
+5. For multi-option entries like `master → primary / initiator`, the rewriter applies the first option (`primary`) while preserving matched casing (`Blacklist → Denylist`, `BLACKLIST → DENYLIST`).
 
 ### Example: default replacement + case-preserving rewrite
 
@@ -234,6 +239,16 @@ Defined in [`requirements.txt`](requirements.txt):
 
 ## 📋 Changelog
 
+### v1.2.0 — Format-preserving corrected-copy export
+- **New `scanners/document_rewriter.py`** module with `rewrite_docx`, `rewrite_pptx`, `rewrite_xlsx`, and `rewrite_file`.
+- Corrected copy is now downloaded in the **original document format** (`.docx`, `.pptx`, `.xlsx`) preserving fonts, headings, tables, slide layouts, and themes.
+- PDFs fall back to the existing plain-text export; the UI now shows a caption explaining why.
+- DOCX/PPTX rewriter uses a run-concatenation strategy to handle words split across multiple formatting runs.
+- XLSX rewriter opens in read-write/formula-preserving mode so untouched cells and formulas are unaffected.
+- `scanners/__init__.py` now exports `rewrite_file`.
+- `app.py` updated: flat-text assembly removed; download button now offers the native format.
+- New `tests/test_document_rewriter.py` with DOCX, PPTX, XLSX, PDF, and line-drift round-trip tests.
+
 ### v1.1.0 — Inclusive rewrite review flow and corrected text export
 - Added `original_sentence` and `suggested_sentence` to every inclusive‑language finding.
 - Added `pick_default_replacement`, `apply_replacement_to_text`, and `apply_all_accepted_replacements` helpers in `scanners/inclusive_scanner.py`.
@@ -260,7 +275,7 @@ Defined in [`requirements.txt`](requirements.txt):
 - Severity levels and per‑rule enable/disable
 - CLI mode (run without Streamlit)
 - Dockerfile for one‑command deployment
-- Export corrected document back into the original format (`.docx`, `.pdf`, `.pptx`, `.xlsx`) preserving formatting
+- Export corrected document back into the original format (`.docx`, `.pptx`, `.xlsx`) — ✅ **Implemented in v1.2.0** (`.pdf` plain-text fallback only)
 
 ---
 
