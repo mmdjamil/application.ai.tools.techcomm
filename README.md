@@ -4,6 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![Streamlit](https://img.shields.io/badge/built%20with-Streamlit-FF4B4B)
+![Version](https://img.shields.io/badge/version-1.1.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -12,10 +13,31 @@
 
 `application.ai.tools.techcomm` is a productivity tool for technical communicators. It takes a document you upload (Word, PDF, PowerPoint, or Excel) and produces two clear reports:
 
-1. **Inclusive Language Scan** — flags non‑inclusive terms (e.g. *blacklist*, *whitelist*, *master*, *slave*), recommends inclusive replacements, generates a rewritten sentence for each finding, and lets you export an approved corrected copy.
+1. **Inclusive Language Scan** — flags non‑inclusive terms (e.g. *blacklist*, *whitelist*, *master*, *slave*), recommends inclusive replacements, generates a rewritten sentence for each finding, lets you approve/reject each rewrite, and exports an approved corrected `.txt` copy of the document.
 2. **Broken Link Check** — extracts every `http(s)://` link in the document and verifies each one in parallel, reporting HTTP status, timeouts, and connection errors.
 
 Both reports include the **page/section and line number** where each issue was found, and can be downloaded as CSV for further triage.
+
+---
+
+## 🆕 What's New in v1.1.0
+
+> Released as part of [PR #2 — Add inclusive rewrite review flow and corrected text export](https://github.com/mmdjamil/application.ai.tools.techcomm/pull/2).
+
+The inclusive language scanner evolved from **detection‑only** to a full **approval‑driven rewrite workflow**:
+
+- ✍️ **Rewrite‑aware findings** — each finding now includes an `original_sentence` and a `suggested_sentence` (the line with the non‑inclusive term swapped for an inclusive replacement).
+- 🔠 **Case‑preserving replacements** — `Blacklist → Denylist`, `BLACKLIST → DENYLIST`, `blacklist → denylist`.
+- 🧩 **Smart default for multi‑option entries** — replacements like `primary / initiator` insert the first option (`primary`) into the rewritten sentence while the full string is still shown for context.
+- ☑️ **Per‑finding review UI** — a new `st.data_editor` table with an **Apply?** checkbox (ticked by default) so you can accept or reject each rewrite individually.
+- 📝 **Corrected copy export** — click **✅ Generate corrected copy** to preview and download `<original_basename>_corrected.txt` with only the approved replacements applied.
+- 🧠 **Session‑aware scans** — scan results are cached in `st.session_state` so review interactions survive Streamlit reruns; the cache is cleared automatically when a different file is uploaded.
+- 🛠️ **New helper APIs** in `scanners/inclusive_scanner.py`:
+  - `pick_default_replacement(replacement)`
+  - `apply_replacement_to_text(text, term, replacement)`
+  - `apply_all_accepted_replacements(text, accepted)`
+
+Existing behavior is preserved: inclusive‑scan CSV export still works (now driven by the reviewed table state), and the broken‑link flow is unchanged.
 
 ---
 
@@ -117,6 +139,19 @@ Matching is **case‑insensitive** and uses **whole‑word boundaries** (`\b`) t
 4. For multi-option entries like `master → primary / initiator`, the rewriter applies the first option (`primary`) while preserving matched casing (`Blacklist → Denylist`, `BLACKLIST → DENYLIST`).
 5. Current v1 limitation: corrected output is exported as plain `.txt` (lossless text), not back into original `.docx`/`.pdf`/`.pptx`/`.xlsx` files with formatting. Original-format round-tripping is on the roadmap.
 
+### Example: default replacement + case-preserving rewrite
+
+```python
+from scanners.inclusive_scanner import apply_replacement_to_text
+
+line = "Blacklist and MASTER values in this list."
+print(apply_replacement_to_text(line, "blacklist", "denylist"))
+# Denylist and MASTER values in this list.
+
+print(apply_replacement_to_text(line, "master", "primary / initiator"))
+# Blacklist and PRIMARY values in this list.
+```
+
 ### Add your own terms
 
 Edit the `NON_INCLUSIVE_TERMS` dictionary in `scanners/inclusive_scanner.py`:
@@ -197,6 +232,26 @@ Defined in [`requirements.txt`](requirements.txt):
 
 ---
 
+## 📋 Changelog
+
+### v1.1.0 — Inclusive rewrite review flow and corrected text export
+- Added `original_sentence` and `suggested_sentence` to every inclusive‑language finding.
+- Added `pick_default_replacement`, `apply_replacement_to_text`, and `apply_all_accepted_replacements` helpers in `scanners/inclusive_scanner.py`.
+- Streamlit UI: per‑finding **Apply?** review checkboxes via `st.data_editor`; scan results cached in `st.session_state` and invalidated when the uploaded file changes.
+- New **✅ Generate corrected copy** action that exports `<original_basename>_corrected.txt` with only the approved rewrites applied.
+- Case‑preserving rewrites (`Blacklist → Denylist`, `BLACKLIST → DENYLIST`) and first‑option insertion for multi‑option entries (e.g. `master → primary / initiator` inserts `primary`).
+- README updated with the new review/export workflow and roadmap entry for original‑format round‑tripping.
+- Shipped via [#2](https://github.com/mmdjamil/application.ai.tools.techcomm/pull/2).
+
+### v1.0.0 — Initial release
+- Multi‑format document parsing (`.docx`, `.pdf`, `.pptx`, `.xlsx`).
+- Non‑inclusive language scan with case‑insensitive whole‑word matching and suggested replacements.
+- Concurrent broken‑link checking (HEAD with GET fallback, 10 workers, 10s timeout).
+- Summary metrics and CSV export for both reports.
+- Streamlit drag‑and‑drop UI.
+
+---
+
 ## 🗺️ Roadmap Ideas
 
 - Configurable / external rule file (YAML/JSON) for inclusive terms
@@ -230,4 +285,4 @@ This project is released under the **MIT License**. See [`LICENSE`](LICENSE) for
 ## 🙏 Acknowledgements
 
 Built for technical writers who care about clear, inclusive, and reliable documentation.
-Powered by [Streamlit](https://streamlit.io/), [pdfplumber](https://github.com/jsvine/pdfplumber), [python-docx](https://github.com/python-openxml/python-docx), [python-pptx](https://github.com/scanny/python-pptx), and [openpyxl](https://openpyxl.readthedocs.io/).
+Powered by [Streamlit](https://streamlit.io/), [pdfplumber](https://github.com/jsvine/pdfplumber), [python-docx](https://github.com/python-openxml/python-docx), [python-pptx](https://github.com/scanny/python-pptx), and [openpyxl](https://foss.heptapod.net/openpyxl/openpyxl).
