@@ -283,14 +283,30 @@ if uploaded_file is not None:
                             replacement = row["Suggested Replacement"]
                             accepted_by_key.setdefault(key, []).append((term, replacement))
 
+                        accepted_findings = [
+                            {
+                                "page": row["Page/Section"],
+                                "line": row["Line"],
+                                "found_word": row["Found Word"],
+                                "term": row["_term"],
+                                "suggested_replacement": row["Suggested Replacement"],
+                            }
+                            for _, row in accepted_rows.iterrows()
+                        ]
+
                         applied_count = sum(len(v) for v in accepted_by_key.values())
                         output_bytes, output_filename, mime = rewrite_file(
-                            file_bytes, filename, accepted_by_key
+                            file_bytes,
+                            filename,
+                            accepted_by_key,
+                            accepted_findings=accepted_findings,
                         )
 
                         st.success(
                             f"✅ Applied **{applied_count}** replacement(s) across "
-                            f"**{len(accepted_by_key)}** line(s)."
+                            f"**{len(accepted_by_key)}** line(s). Changed words are "
+                            f"highlighted and (where supported) annotated in the "
+                            f"corrected copy."
                         )
 
                         # Show a text preview only for the PDF plain-text fallback;
@@ -304,8 +320,14 @@ if uploaded_file is not None:
                                     label_visibility="collapsed",
                                 )
                             st.caption(
-                                "ℹ️ PDFs are exported as plain text because in-place "
-                                "PDF rewriting is not supported."
+                                "ℹ️ This PDF could not be annotated, so the corrected "
+                                "copy was exported as plain text instead."
+                            )
+                        elif mime == "application/pdf":
+                            st.caption(
+                                "ℹ️ Open the corrected PDF in your reader of choice "
+                                "to see highlights and sticky notes for each "
+                                "suggested replacement."
                             )
 
                         st.download_button(

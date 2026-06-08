@@ -1,0 +1,7 @@
+Defaulting to user installation because normal site-packages is not writeable
+Collecting pymupdf
+  Downloading pymupdf-1.27.2.3-cp310-abi3-manylinux_2_28_x86_64.whl.metadata (24 kB)
+Downloading pymupdf-1.27.2.3-cp310-abi3-manylinux_2_28_x86_64.whl (25.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 25.0/25.0 MB 179.2 MB/s eta 0:00:00
+Installing collected packages: pymupdf
+Successfully installed pymupdf-1.27.2.3

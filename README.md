@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
 ![Streamlit](https://img.shields.io/badge/built%20with-Streamlit-FF4B4B)
-![Version](https://img.shields.io/badge/version-1.1.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.3.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
@@ -13,12 +13,19 @@
 
 `application.ai.tools.techcomm` is a productivity tool for technical communicators. It takes a document you upload (Word, PDF, PowerPoint, or Excel) and produces two clear reports:
 
-1. **Inclusive Language Scan** — flags non‑inclusive terms (e.g. *blacklist*, *whitelist*, *master*, *slave*), recommends inclusive replacements, generates a rewritten sentence for each finding, lets you approve/reject each rewrite, and exports an approved corrected `.txt` copy of the document.
+1. **Inclusive Language Scan** — flags non‑inclusive terms (e.g. *blacklist*, *whitelist*, *master*, *slave*), recommends inclusive replacements, generates a rewritten sentence for each finding, lets you approve/reject each rewrite, and exports an approved corrected copy of the document with visible change markers.
 2. **Broken Link Check** — extracts every `http(s)://` link in the document and verifies each one in parallel, reporting HTTP status, timeouts, and connection errors.
 
 Both reports include the **page/section and line number** where each issue was found, and can be downloaded as CSV for further triage.
 
 ---
+
+## 🆕 What's New in v1.3.0
+
+- 📄 **Annotated PDF export** — accepted PDF suggestions now generate a real corrected `.pdf` with highlights and sticky notes describing each suggested replacement.
+- 🟨 **Visual change markers in DOCX/XLSX** — rewritten Word documents highlight each inserted replacement in yellow, and changed Excel cells get a yellow fill plus a `Doc Scanner` comment listing the applied replacements.
+- 🎞️ **Visible PPTX styling** — rewritten PowerPoint decks now style each inserted replacement so the changed word stands out during review.
+- 🧷 **Safer PDF fallback** — if a PDF cannot be opened or annotated, the app still falls back to the existing plain-text export path instead of failing.
 
 ## 🆕 What's New in v1.1.0
 
@@ -49,7 +56,7 @@ Existing behavior is preserved: inclusive‑scan CSV export still works (now dri
   - PowerPoint (`.pptx`) — slides, shapes, and tables
   - Excel (`.xlsx`) — every sheet and row
 - 🔤 **Non‑inclusive language detection** with case‑insensitive whole‑word matching and suggested replacements.
-- ✅ **Suggestion review & corrected-copy export** — approve/reject each suggested rewrite row-by-row, then download an approved corrected copy **in the original document format** (`.docx`, `.pptx`, or `.xlsx`); PDFs fall back to a plain `.txt` export with a UI notice.
+- ✅ **Suggestion review & corrected-copy export** — approve/reject each suggested rewrite row-by-row, then download an approved corrected copy **in the original document format** with visible highlights or annotations (`.docx`, `.pptx`, `.xlsx`, `.pdf`).
 - 🔗 **Concurrent link checking** (10 workers) using HEAD requests with automatic GET fallback, custom User‑Agent, and 10s timeout.
 - 📊 **Summary metrics** — word count, compliance rate, total links, broken links.
 - 📥 **CSV export** of both inclusive scan and link check results.
@@ -138,10 +145,10 @@ Matching is **case‑insensitive** and uses **whole‑word boundaries** (`\b`) t
 2. Untick any suggestions you do not want to keep.
 3. Click **✅ Generate corrected copy** to download the corrected document.
 4. The corrected copy is returned **in the same format as the uploaded file**:
-   - `.docx` → a `.docx` that opens cleanly in Word with original fonts, headings, and tables preserved.
-   - `.pptx` → a `.pptx` that opens in PowerPoint with layout and theme preserved.
-   - `.xlsx` → a `.xlsx` that opens in Excel with styling and untouched formulas preserved.
-   - `.pdf` → a plain `.txt` fallback (in-place PDF rewriting is not supported); a caption in the UI explains this.
+   - `.docx` → a `.docx` that opens cleanly in Word with original fonts, headings, and tables preserved, with each inserted replacement highlighted in yellow.
+   - `.pptx` → a `.pptx` that opens in PowerPoint with layout and theme preserved, with each inserted replacement visibly styled for review.
+   - `.xlsx` → a `.xlsx` that opens in Excel with styling and untouched formulas preserved; changed cells are filled yellow and receive a `Doc Scanner` comment listing the applied replacements.
+   - `.pdf` → a corrected `.pdf` with highlights and sticky-note annotations for each accepted suggestion; if the PDF cannot be opened or annotated, the tool falls back to the plain `.txt` export.
 5. For multi-option entries like `master → primary / initiator`, the rewriter applies the first option (`primary`) while preserving matched casing (`Blacklist → Denylist`, `BLACKLIST → DENYLIST`).
 
 ### Example: default replacement + case-preserving rewrite
@@ -221,6 +228,7 @@ Defined in [`requirements.txt`](requirements.txt):
 | `streamlit`    | Web UI                                   |
 | `python-docx`  | Read `.docx` files                       |
 | `pdfplumber`   | Read `.pdf` files                        |
+| `pymupdf`      | Add PDF highlights and sticky notes      |
 | `python-pptx`  | Read `.pptx` files                       |
 | `openpyxl`     | Read `.xlsx` files                       |
 | `requests`     | HTTP link checking                       |
@@ -238,6 +246,13 @@ Defined in [`requirements.txt`](requirements.txt):
 ---
 
 ## 📋 Changelog
+
+### v1.3.0 — Visual markup for corrected copies
+- PDFs now export as annotated `.pdf` files with highlights and sticky notes for accepted replacements when annotation is possible.
+- DOCX exports highlight inserted replacement words in yellow.
+- PPTX exports visibly style inserted replacement words for easier review.
+- XLSX exports fill changed cells yellow and add `Doc Scanner` comments listing the applied replacements.
+- The app UI now passes accepted findings into the PDF rewriter and explains whether the corrected PDF should be reviewed in a PDF reader or has fallen back to plain text.
 
 ### v1.2.0 — Format-preserving corrected-copy export
 - **New `scanners/document_rewriter.py`** module with `rewrite_docx`, `rewrite_pptx`, `rewrite_xlsx`, and `rewrite_file`.
