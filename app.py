@@ -6,6 +6,7 @@ Streamlit web application — Inclusive Language & Broken Link Scanner
 import streamlit as st
 import pandas as pd
 from scanners import parse_file, scan_for_inclusive_language, check_all_links
+from scanners.inclusive_scanner import apply_all_accepted_replacements
 
 # ──────────────────────────────────────────────
 # Page Configuration
@@ -35,6 +36,13 @@ if uploaded_file is not None:
     file_bytes = uploaded_file.read()
     filename = uploaded_file.name
 
+    # Reset cached scan results if a new file was uploaded
+    if (
+        "scan_data" in st.session_state
+        and st.session_state["scan_data"].get("filename") != filename
+    ):
+        del st.session_state["scan_data"]
+
     st.success(f"✅ Uploaded: **{filename}** ({len(file_bytes) / 1024:.1f} KB)")
 
     # ──────────────────────────────────────────
@@ -57,15 +65,8 @@ if uploaded_file is not None:
             placeholder="ghp_xxxxxxxxxxxx",
             help="Sent as 'Authorization: ******'.",
         )
-        auth_user = st.text_input(
-            "👤 Basic auth username",
-            placeholder="username",
-        )
-        auth_pass = st.text_input(
-            "🔒 Basic auth password",
-            type="password",
-            placeholder="password",
-        )
+        auth_user = st.text_input("👤 Basic auth username", placeholder="username")
+        auth_pass = st.text_input("🔒 Basic auth password", type="password", placeholder="password")
         custom_headers_raw = st.text_area(
             "📋 Custom headers (one per line, Key: Value)",
             placeholder="X-API-Key: abc123\nX-Custom-Header: value",
@@ -101,7 +102,7 @@ if uploaded_file is not None:
     auth_config = auth_config if auth_config else None
 
     # ──────────────────────────────────────────
-    # Run Scan
+    # Run Scan (only re-runs the scan when the button is clicked)
     # ──────────────────────────────────────────
     if st.button("🚀 Start Scan", type="primary", use_container_width=True):
 
@@ -109,7 +110,6 @@ if uploaded_file is not None:
         with st.spinner("📄 Parsing document..."):
             try:
                 parsed_lines = parse_file(file_bytes, filename)
-                st.info(f"📄 Parsed **{len(parsed_lines)}** lines from the document.")
             except ValueError as e:
                 st.error(str(e))
                 st.stop()
@@ -117,15 +117,61 @@ if uploaded_file is not None:
                 st.error(f"❌ Error parsing file: {str(e)}")
                 st.stop()
 
+        # Step 2: Scan for non-inclusive language
+        inclusive_results = None
+        if run_inclusive:
+            with st.spinner("Scanning for non-inclusive terms..."):
+                inclusive_results = scan_for_inclusive_language(parsed_lines)
+
+        # Step 3: Check links
+        link_results = None
+        if run_links:
+            progress_bar = st.progress(0, text="Checking links...")
+
+            def update_progress(completed, total):
+                progress_bar.progress(
+                    completed / total,
+                    text=f"Checking links... ({completed}/{total})"
+                )
+
+            link_results = check_all_links(
+                parsed_lines,
+                progress_callback=update_progress,
+                auth_config=auth_config,
+            )
+            progress_bar.empty()
+
+        # Persist for reruns triggered by review widgets
+        st.session_state["scan_data"] = {
+            "filename": filename,
+            "parsed_lines": parsed_lines,
+            "inclusive_results": inclusive_results,
+            "link_results": link_results,
+            "run_inclusive": run_inclusive,
+            "run_links": run_links,
+        }
+
+    # ──────────────────────────────────────────
+    # Render results from session state
+    # (so checkboxes / generate-copy button survive reruns)
+    # ──────────────────────────────────────────
+    if (
+        "scan_data" in st.session_state
+        and st.session_state["scan_data"].get("filename") == filename
+    ):
+        scan_data = st.session_state["scan_data"]
+        parsed_lines = scan_data["parsed_lines"]
+        inclusive_results = scan_data["inclusive_results"]
+        link_results = scan_data["link_results"]
+
+        st.info(f"📄 Parsed **{len(parsed_lines)}** lines from the document.")
+
         # ──────────────────────────────────────
         # Non-Inclusive Language Results
         # ──────────────────────────────────────
-        if run_inclusive:
+        if scan_data["run_inclusive"] and inclusive_results is not None:
             st.divider()
             st.subheader("🔤 Non-Inclusive Language Scan Results")
-
-            with st.spinner("Scanning for non-inclusive terms..."):
-                inclusive_results = scan_for_inclusive_language(parsed_lines)
 
             # Summary metrics
             m1, m2, m3 = st.columns(3)
@@ -137,40 +183,164 @@ if uploaded_file is not None:
             )
 
             if inclusive_results["findings"]:
+                # Build the review dataframe
                 df_inclusive = pd.DataFrame(inclusive_results["findings"])
-                df_inclusive.columns = ["Page/Section", "Line", "Found Word", "Suggested Replacement", "Context"]
+                df_inclusive["apply"] = True
+                df_inclusive = df_inclusive.rename(columns={
+                    "apply": "Apply?",
+                    "page": "Page/Section",
+                    "line": "Line",
+                    "found_word": "Found Word",
+                    "suggested_replacement": "Suggested Replacement",
+                    "original_sentence": "Original Sentence",
+                    "suggested_sentence": "Suggested Sentence",
+                    "context": "Context",
+                    "term": "_term",  # internal, hidden via column_order
+                })
                 df_inclusive.index = range(1, len(df_inclusive) + 1)
-                st.dataframe(df_inclusive, use_container_width=True)
 
-                csv_inclusive = df_inclusive.to_csv(index=False)
-                st.download_button(
-                    "📥 Download Inclusive Scan Results (CSV)",
-                    csv_inclusive,
-                    file_name="inclusive_scan_results.csv",
-                    mime="text/csv"
+                st.markdown("### ✏️ Review suggested replacements")
+                st.caption(
+                    "Untick **Apply?** for any suggestion you don't want to keep, "
+                    "then click **Generate corrected copy** to download a rewritten "
+                    "version of your document."
                 )
+
+                edited_df = st.data_editor(
+                    df_inclusive,
+                    use_container_width=True,
+                    column_order=[
+                        "Apply?",
+                        "Page/Section",
+                        "Line",
+                        "Found Word",
+                        "Suggested Replacement",
+                        "Original Sentence",
+                        "Suggested Sentence",
+                        "Context",
+                    ],
+                    column_config={
+                        "Apply?": st.column_config.CheckboxColumn(
+                            "Apply?",
+                            help="Accept this replacement when generating the corrected copy.",
+                            default=True,
+                        ),
+                        "Original Sentence": st.column_config.TextColumn(
+                            "Original Sentence", width="medium"
+                        ),
+                        "Suggested Sentence": st.column_config.TextColumn(
+                            "Suggested Sentence", width="medium"
+                        ),
+                    },
+                    disabled=[
+                        "Page/Section",
+                        "Line",
+                        "Found Word",
+                        "Suggested Replacement",
+                        "Original Sentence",
+                        "Suggested Sentence",
+                        "Context",
+                    ],
+                    key="inclusive_review_editor",
+                )
+
+                # Downloads / actions
+                col_dl1, col_dl2 = st.columns(2)
+                with col_dl1:
+                    csv_inclusive = (
+                        edited_df.drop(columns=["_term"], errors="ignore")
+                        .to_csv(index=False)
+                    )
+                    st.download_button(
+                        "📥 Download scan results (CSV)",
+                        csv_inclusive,
+                        file_name="inclusive_scan_results.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+
+                with col_dl2:
+                    generate_clicked = st.button(
+                        "✅ Generate corrected copy",
+                        type="primary",
+                        use_container_width=True,
+                        help="Apply the ticked replacements and download a rewritten copy of your document text.",
+                    )
+
+                if generate_clicked:
+                    accepted_rows = edited_df[edited_df["Apply?"] == True]
+
+                    if accepted_rows.empty:
+                        st.warning(
+                            "No suggestions selected. Tick **Apply?** for at least one row "
+                            "to generate a corrected copy."
+                        )
+                    else:
+                        # Group accepted (term, replacement) pairs by (page, line)
+                        accepted_by_key: dict = {}
+                        for _, row in accepted_rows.iterrows():
+                            key = (row["Page/Section"], row["Line"])
+                            term = row["_term"]
+                            replacement = row["Suggested Replacement"]
+                            accepted_by_key.setdefault(key, []).append((term, replacement))
+
+                        # Build the corrected document line by line
+                        corrected_chunks = []
+                        current_page = None
+                        applied_count = 0
+
+                        for entry in parsed_lines:
+                            key = (entry["page"], entry["line"])
+                            text = entry["text"]
+                            if key in accepted_by_key:
+                                text = apply_all_accepted_replacements(
+                                    text, accepted_by_key[key]
+                                )
+                                applied_count += len(accepted_by_key[key])
+
+                            if entry["page"] != current_page:
+                                if corrected_chunks:
+                                    corrected_chunks.append("")
+                                corrected_chunks.append(
+                                    f"--- Page/Section {entry['page']} ---"
+                                )
+                                current_page = entry["page"]
+
+                            corrected_chunks.append(f"L{entry['line']:>4}: {text}")
+
+                        corrected_doc = "\n".join(corrected_chunks).strip() + "\n"
+
+                        st.success(
+                            f"✅ Applied **{applied_count}** replacement(s) across "
+                            f"**{len(accepted_by_key)}** line(s)."
+                        )
+
+                        with st.expander("👀 Preview corrected document", expanded=True):
+                            st.text_area(
+                                "Corrected document (text)",
+                                corrected_doc,
+                                height=400,
+                                label_visibility="collapsed",
+                            )
+
+                        base_name = filename.rsplit(".", 1)[0]
+                        st.download_button(
+                            "⬇️ Download corrected copy (.txt)",
+                            corrected_doc.encode("utf-8"),
+                            file_name=f"{base_name}_corrected.txt",
+                            mime="text/plain",
+                            use_container_width=True,
+                        )
             else:
                 st.success("🎉 No non-inclusive language found! Your document is clean.")
 
         # ──────────────────────────────────────
         # Broken Link Results
         # ──────────────────────────────────────
-        if run_links:
+        if scan_data["run_links"] and link_results is not None:
             st.divider()
             st.subheader("🔗 Broken Link Check Results")
 
-            progress_bar = st.progress(0, text="Checking links...")
-
-            def update_progress(completed, total):
-                progress_bar.progress(
-                    completed / total,
-                    text=f"Checking links... ({completed}/{total})"
-                )
-
-            link_results = check_all_links(parsed_lines, progress_callback=update_progress, auth_config=auth_config)
-            progress_bar.empty()
-
-            # Summary metrics
             l1, l2, l3 = st.columns(3)
             l1.metric("🔗 Total Links Checked", link_results["total_links_checked"])
             l2.metric("❌ Broken Links", link_results["broken_link_count"])
