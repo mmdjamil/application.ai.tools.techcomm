@@ -5,8 +5,12 @@ Streamlit web application — Inclusive Language & Broken Link Scanner
 
 import streamlit as st
 import pandas as pd
-from scanners import parse_file, scan_for_inclusive_language, check_all_links
-from scanners.inclusive_scanner import apply_all_accepted_replacements
+from scanners import (
+    parse_file,
+    scan_for_inclusive_language,
+    check_all_links,
+    rewrite_file,
+)
 
 # ──────────────────────────────────────────────
 # Page Configuration
@@ -264,7 +268,7 @@ if uploaded_file is not None:
                         "✅ Generate corrected copy",
                         type="primary",
                         use_container_width=True,
-                        help="Apply the ticked replacements and download a rewritten copy of your document text.",
+                        help="Apply the ticked replacements and download a rewritten copy of your document.",
                     )
 
                 if generate_clicked:
@@ -284,51 +288,34 @@ if uploaded_file is not None:
                             replacement = row["Suggested Replacement"]
                             accepted_by_key.setdefault(key, []).append((term, replacement))
 
-                        # Build the corrected document line by line
-                        corrected_chunks = []
-                        current_page = None
-                        applied_count = 0
-
-                        for entry in parsed_lines:
-                            key = (entry["page"], entry["line"])
-                            text = entry["text"]
-                            if key in accepted_by_key:
-                                text = apply_all_accepted_replacements(
-                                    text, accepted_by_key[key]
-                                )
-                                applied_count += len(accepted_by_key[key])
-
-                            if entry["page"] != current_page:
-                                if corrected_chunks:
-                                    corrected_chunks.append("")
-                                corrected_chunks.append(
-                                    f"--- Page/Section {entry['page']} ---"
-                                )
-                                current_page = entry["page"]
-
-                            corrected_chunks.append(f"L{entry['line']:>4}: {text}")
-
-                        corrected_doc = "\n".join(corrected_chunks).strip() + "\n"
+                        applied_count = sum(len(v) for v in accepted_by_key.values())
+                        output_bytes, output_filename, mime = rewrite_file(
+                            file_bytes, filename, accepted_by_key
+                        )
 
                         st.success(
                             f"✅ Applied **{applied_count}** replacement(s) across "
                             f"**{len(accepted_by_key)}** line(s)."
                         )
 
-                        with st.expander("👀 Preview corrected document", expanded=True):
-                            st.text_area(
-                                "Corrected document (text)",
-                                corrected_doc,
-                                height=400,
-                                label_visibility="collapsed",
+                        if mime == "text/plain":
+                            with st.expander("👀 Preview corrected document", expanded=True):
+                                st.text_area(
+                                    "Corrected document (text)",
+                                    output_bytes.decode("utf-8", errors="replace"),
+                                    height=400,
+                                    label_visibility="collapsed",
+                                )
+                            st.caption(
+                                "ℹ️ PDFs are exported as plain text because in-place PDF rewriting "
+                                "is not supported."
                             )
 
-                        base_name = filename.rsplit(".", 1)[0]
                         st.download_button(
-                            "⬇️ Download corrected copy (.txt)",
-                            corrected_doc.encode("utf-8"),
-                            file_name=f"{base_name}_corrected.txt",
-                            mime="text/plain",
+                            f"⬇️ Download corrected copy ({output_filename.rsplit('.', 1)[-1]})",
+                            output_bytes,
+                            file_name=output_filename,
+                            mime=mime,
                             use_container_width=True,
                         )
             else:

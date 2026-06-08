@@ -49,7 +49,7 @@ Existing behavior is preserved: inclusive‑scan CSV export still works (now dri
   - PowerPoint (`.pptx`) — slides, shapes, and tables
   - Excel (`.xlsx`) — every sheet and row
 - 🔤 **Non‑inclusive language detection** with case‑insensitive whole‑word matching and suggested replacements.
-- ✅ **Suggestion review & corrected-copy export** — approve/reject each suggested rewrite row-by-row, then download an approved corrected `.txt` copy.
+- ✅ **Suggestion review & corrected-copy export** — approve/reject each suggested rewrite row-by-row, then download an approved corrected copy in the original format for `.docx`, `.pptx`, and `.xlsx` uploads (`.pdf` falls back to `.txt`).
 - 🔗 **Concurrent link checking** (10 workers) using HEAD requests with automatic GET fallback, custom User‑Agent, and 10s timeout.
 - 📊 **Summary metrics** — word count, compliance rate, total links, broken links.
 - 📥 **CSV export** of both inclusive scan and link check results.
