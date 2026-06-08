@@ -12,7 +12,7 @@
 
 `application.ai.tools.techcomm` is a productivity tool for technical communicators. It takes a document you upload (Word, PDF, PowerPoint, or Excel) and produces two clear reports:
 
-1. **Inclusive Language Scan** — flags non‑inclusive terms (e.g. *blacklist*, *whitelist*, *master*, *slave*) and recommends inclusive replacements.
+1. **Inclusive Language Scan** — flags non‑inclusive terms (e.g. *blacklist*, *whitelist*, *master*, *slave*), recommends inclusive replacements, generates a rewritten sentence for each finding, and lets you export an approved corrected copy.
 2. **Broken Link Check** — extracts every `http(s)://` link in the document and verifies each one in parallel, reporting HTTP status, timeouts, and connection errors.
 
 Both reports include the **page/section and line number** where each issue was found, and can be downloaded as CSV for further triage.
@@ -27,6 +27,7 @@ Both reports include the **page/section and line number** where each issue was f
   - PowerPoint (`.pptx`) — slides, shapes, and tables
   - Excel (`.xlsx`) — every sheet and row
 - 🔤 **Non‑inclusive language detection** with case‑insensitive whole‑word matching and suggested replacements.
+- ✅ **Suggestion review & corrected-copy export** — approve/reject each suggested rewrite row-by-row, then download an approved corrected `.txt` copy.
 - 🔗 **Concurrent link checking** (10 workers) using HEAD requests with automatic GET fallback, custom User‑Agent, and 10s timeout.
 - 📊 **Summary metrics** — word count, compliance rate, total links, broken links.
 - 📥 **CSV export** of both inclusive scan and link check results.
@@ -107,6 +108,14 @@ The default ruleset is defined in [`scanners/inclusive_scanner.py`](scanners/inc
 | `slave`     | `secondary / target`      |
 
 Matching is **case‑insensitive** and uses **whole‑word boundaries** (`\b`) to avoid false positives.
+
+### ✅ Reviewing suggestions & exporting a corrected copy
+
+1. After a scan, each finding includes **Original Sentence** and **Suggested Sentence** columns, plus an **Apply?** checkbox (default ticked).
+2. Untick any suggestions you do not want to keep.
+3. Click **✅ Generate corrected copy** to preview and download `<filename>_corrected.txt`.
+4. For multi-option entries like `master → primary / initiator`, the rewriter applies the first option (`primary`) while preserving matched casing (`Blacklist → Denylist`, `BLACKLIST → DENYLIST`).
+5. Current v1 limitation: corrected output is exported as plain `.txt` (lossless text), not back into original `.docx`/`.pdf`/`.pptx`/`.xlsx` files with formatting. Original-format round-tripping is on the roadmap.
 
 ### Add your own terms
 
@@ -196,6 +205,7 @@ Defined in [`requirements.txt`](requirements.txt):
 - Severity levels and per‑rule enable/disable
 - CLI mode (run without Streamlit)
 - Dockerfile for one‑command deployment
+- Export corrected document back into the original format (`.docx`, `.pdf`, `.pptx`, `.xlsx`) preserving formatting
 
 ---
 
