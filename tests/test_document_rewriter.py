@@ -10,7 +10,9 @@ import io
 import unittest
 from unittest.mock import patch
 
+import fitz
 from docx import Document as DocxDocument
+from docx.enum.text import WD_COLOR_INDEX
 from pptx import Presentation
 from pptx.util import Inches
 from openpyxl import load_workbook, Workbook
@@ -109,6 +111,25 @@ class DocumentRewriterTests(unittest.TestCase):
         result_doc = DocxDocument(io.BytesIO(output_bytes))
         self.assertTrue(len(result_doc.paragraphs) > 0)
 
+    def test_docx_highlights_replaced_word(self):
+        """Replaced DOCX words should be highlighted in yellow."""
+        file_bytes = _make_docx("The blacklist is bad.")
+        parsed = parse_docx(file_bytes)
+        key = (parsed[0]["page"], parsed[0]["line"])
+        accepted_by_key = {key: [("blacklist", "denylist")]}
+
+        output_bytes, _, _ = rewrite_file(file_bytes, "report.docx", accepted_by_key)
+
+        result_doc = DocxDocument(io.BytesIO(output_bytes))
+        highlighted_runs = [
+            run
+            for para in result_doc.paragraphs
+            for run in para.runs
+            if run.font.highlight_color == WD_COLOR_INDEX.YELLOW
+            and "denylist" in run.text.lower()
+        ]
+        self.assertTrue(highlighted_runs)
+
     # --- PPTX ---
 
     def test_pptx_replaces_master(self):
@@ -137,6 +158,30 @@ class DocumentRewriterTests(unittest.TestCase):
         self.assertIn("primary", all_text)
         self.assertNotIn("master", all_text)
 
+    def test_pptx_styles_replaced_word(self):
+        """Replaced PPTX words should be visibly styled."""
+        file_bytes = _make_pptx("The master branch is here.")
+        accepted_by_key = {(1, 1): [("master", "primary / initiator")]}
+
+        output_bytes, _, _ = rewrite_file(file_bytes, "slides.pptx", accepted_by_key)
+
+        prs = Presentation(io.BytesIO(output_bytes))
+        styled_found = False
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if not (hasattr(shape, "has_text_frame") and shape.has_text_frame):
+                    continue
+                for para in shape.text_frame.paragraphs:
+                    for run in para.runs:
+                        if "primary" not in run.text.lower():
+                            continue
+                        has_highlight_xml = "<a:highlight" in run._r.xml
+                        has_bold = run.font.bold is True
+                        has_color = run.font.color.rgb is not None
+                        if has_highlight_xml or has_bold or has_color:
+                            styled_found = True
+        self.assertTrue(styled_found)
+
     # --- XLSX ---
 
     def test_xlsx_replaces_slave(self):
@@ -159,7 +204,71 @@ class DocumentRewriterTests(unittest.TestCase):
         ws = wb.active
         self.assertEqual(ws["A1"].value, "secondary")
 
+    def test_xlsx_highlights_and_comments_cell(self):
+        """Changed XLSX cells should be filled yellow and receive a comment."""
+        file_bytes = _make_xlsx("blacklist master")
+        accepted_by_key = {
+            (1, 1): [
+                ("blacklist", "denylist"),
+                ("master", "primary / initiator"),
+            ]
+        }
+
+        output_bytes, _, _ = rewrite_file(file_bytes, "data.xlsx", accepted_by_key)
+
+        wb = load_workbook(io.BytesIO(output_bytes))
+        ws = wb.active
+        self.assertTrue(ws["A1"].fill.start_color.rgb.endswith("FFFF00"))
+        self.assertIsNotNone(ws["A1"].comment)
+        self.assertIn("blacklist", ws["A1"].comment.text)
+        self.assertIn("denylist", ws["A1"].comment.text)
+        self.assertIn("master", ws["A1"].comment.text)
+        self.assertIn("primary", ws["A1"].comment.text)
+
     # --- PDF fallback ---
+
+    def test_pdf_returns_pdf_with_annotations(self):
+        """Accepted PDF findings should produce an annotated PDF."""
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "The blacklist is bad.")
+        file_bytes = doc.tobytes()
+        doc.close()
+
+        accepted_by_key = {(1, 1): [("blacklist", "denylist")]}
+        accepted_findings = [
+            {
+                "page": 1,
+                "line": 1,
+                "found_word": "blacklist",
+                "term": "blacklist",
+                "suggested_replacement": "denylist",
+            }
+        ]
+
+        output_bytes, output_filename, mime = rewrite_file(
+            file_bytes,
+            "report.pdf",
+            accepted_by_key,
+            accepted_findings=accepted_findings,
+        )
+
+        self.assertEqual(mime, "application/pdf")
+        self.assertTrue(output_filename.endswith(".pdf"))
+
+        result = fitz.open(stream=output_bytes, filetype="pdf")
+        page = result[0]
+        annot_types = []
+        annot_contents = []
+        for annot in page.annots():
+            annot_types.append(annot.type[1])
+            annot_contents.append(annot.info.get("content") or "")
+        highlight_count = sum(annot_type == "Highlight" for annot_type in annot_types)
+        text_count = sum(annot_type == "Text" for annot_type in annot_types)
+        self.assertGreaterEqual(highlight_count, 1)
+        self.assertGreaterEqual(text_count, 1)
+        self.assertTrue(any("denylist" in content for content in annot_contents))
+        result.close()
 
     def test_pdf_fallback_returns_text_plain(self):
         """PDF path must return mime=text/plain and apply the replacement."""
